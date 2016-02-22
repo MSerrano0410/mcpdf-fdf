@@ -25,14 +25,18 @@
 package aero.m_click.mcpdf;
 
 import com.itextpdf.text.DocumentException;
+import com.itextpdf.text.pdf.FdfReader;
 import com.itextpdf.text.pdf.PdfReader;
 import com.itextpdf.text.pdf.PdfStamper;
 import com.itextpdf.text.pdf.XfdfReader;
+
+import java.io.BufferedInputStream;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Arrays;
 
 public class Main
 {
@@ -58,9 +62,22 @@ public class Main
         config.pdfOutputStream = System.out;
         config.formInputStream = null;
         config.flatten = false;
+        config.isFdf = false;
+        byte[] fdfHeader = "%FDF".getBytes();
         for (int i = 1; i < args.length; i++) {
             if ("fill_form".equals(args[i])) {
-                config.formInputStream = System.in;
+                config.formInputStream = new BufferedInputStream(System.in);
+                config.formInputStream.mark(4);
+                try {
+                	byte[] header = new byte[4];
+                	config.formInputStream.read(header, 0, 4);
+                	if (Arrays.equals(header, fdfHeader)) {
+                		config.isFdf = true;
+                	}
+                } catch(IOException e) {
+                	System.err.println(e);
+                	System.err.println("Problem reading standard input.");
+                }
                 i++;
                 if (!"-".equals(args[i])) {
                     throw new RuntimeException("Missing \"-\" after fill_form operation.");
@@ -85,7 +102,11 @@ public class Main
         PdfReader reader = new PdfReader(config.pdfInputStream);
         PdfStamper stamper = new PdfStamper(reader, config.pdfOutputStream, '\0');
         if (config.formInputStream != null) {
-            stamper.getAcroFields().setFields(new XfdfReader(config.formInputStream));
+        	if (config.isFdf) {
+        		stamper.getAcroFields().setFields(new FdfReader(config.formInputStream));
+        	} else {
+        		stamper.getAcroFields().setFields(new XfdfReader(config.formInputStream));
+        	}
         }
         stamper.setFormFlattening(config.flatten);
         stamper.close();
